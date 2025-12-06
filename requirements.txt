@@ -1,0 +1,9 @@
+google-generativeai
+sqlalchemy
+schedule
+requests
+python-dotenv
+Pillow
+fastapi
+uvicorn
+pydantic

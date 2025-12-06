@@ -1,0 +1,25 @@
+# Environment Variables
+.env
+.venv
+venv/
+env/
+__pycache__/
+
+# Node.js
+node_modules/
+web/.next/
+web/node_modules/
+web/out/
+web/build/
+.npm/
+
+# Styles
+*.log
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# Database
+data/*.db

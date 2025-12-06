@@ -1,0 +1,11 @@
+My goal is to establish myself as a thought leader in AI and Software Engineering.
+Target Audience: Developers, Tech Leads, Startup Founders.
+Topics:
+- Python tips and tricks
+- Docker best practices
+- The future of AI agents
+- Productivity hacks for developers
+- System Design concepts
+
+Tone: Professional, Insightful, Encouraging.
+Frequency: Daily.
