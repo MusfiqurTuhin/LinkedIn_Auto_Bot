@@ -21,7 +21,9 @@ export const InfographicCard: React.FC<InfographicCardProps> = ({ content, image
             {image_prompt && (
                 <div className="absolute inset-0 z-0 opacity-30">
                     <img
-                        src={`https://image.pollinations.ai/prompt/${encodeURIComponent(image_prompt)}?width=600&height=800&nologo=true`}
+                        src={image_prompt.startsWith('blob:') || image_prompt.startsWith('http')
+                            ? image_prompt
+                            : `https://image.pollinations.ai/prompt/${encodeURIComponent(image_prompt)}?width=600&height=800&nologo=true`}
                         alt="Infographic background"
                         className="w-full h-full object-cover"
                     />

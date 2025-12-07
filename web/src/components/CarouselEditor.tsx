@@ -4,7 +4,7 @@ import React, { useState, useRef, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent } from '@/components/ui/card'
-import { Loader2, Plus, Calendar, Download, Palette, Type, User, Sparkles, LayoutTemplate, Rows } from 'lucide-react'
+import { Loader2, Plus, Calendar, Download, Palette, Type, User, Sparkles, LayoutTemplate, Rows, ArrowRight, ImagePlus, Ratio, Eye, EyeOff } from 'lucide-react'
 import { toPng } from 'html-to-image'
 import download from 'downloadjs'
 import jsPDF from 'jspdf'
@@ -19,7 +19,12 @@ interface Slide {
     image_prompt: string
     layout?: 'classic' | 'visual' | 'split' | 'infographic'
     data_points?: { label: string; value: number }[]
+    custom_image_url?: string
+    hide_logo?: boolean
 }
+
+type AspectRatio = '4/5' | '1/1' | '16/9'
+type LogoStyle = 'original' | 'grayscale' | 'white' | 'black'
 
 export function CarouselEditor() {
     const {
@@ -32,8 +37,12 @@ export function CarouselEditor() {
 
     const [topic, setTopic] = useState('')
     const [days, setDays] = useState(5)
+    const [aspectRatio, setAspectRatio] = useState<AspectRatio>('4/5')
+    const [logoStyle, setLogoStyle] = useState<LogoStyle>('original')
+    const [logoSize, setLogoSize] = useState(32)
     const [isLoading, setIsLoading] = useState(false)
     const [slides, setSlides] = useState<Slide[]>([])
+    const [currentSlideIndex, setCurrentSlideIndex] = useState(0)
 
     // Brand State
     const [brandName, setBrandName] = useState('')
@@ -79,7 +88,7 @@ export function CarouselEditor() {
         }
     }
 
-    const handleSlideChange = (index: number, field: keyof Slide, value: string) => {
+    const handleSlideChange = (index: number, field: keyof Slide, value: any) => {
         const newSlides = [...slides]
         // @ts-ignore
         newSlides[index] = { ...newSlides[index], [field]: value }
@@ -100,7 +109,7 @@ export function CarouselEditor() {
         if (!el) return
         try {
             console.log("Generating slide image...")
-            const dataUrl = await toPng(el)
+            const dataUrl = await toPng(el, { pixelRatio: 3, cacheBust: true })
 
             // Convert Base64 to Blob for robust download
             const res = await fetch(dataUrl)
@@ -126,23 +135,40 @@ export function CarouselEditor() {
         }
     }
 
+    const handleImageUpload = (index: number, e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0]
+        if (file) {
+            const url = URL.createObjectURL(file)
+            handleSlideChange(index, 'custom_image_url', url)
+        }
+    }
+
+    const getDimensions = () => {
+        switch (aspectRatio) {
+            case '1/1': return { width: 340, height: 340, aspect: 'aspect-square' }
+            case '16/9': return { width: 340, height: 191, aspect: 'aspect-video' }
+            default: return { width: 340, height: 425, aspect: 'aspect-[4/5]' } // 4:5
+        }
+    }
+
     const handleDownloadPDF = async () => {
         if (slides.length === 0) return
 
-        // Create PDF (Portrait A4 or custom based on visual size)
-        // 1080x1350 is roughly 4:5 ratio. 
+        const { width, height } = getDimensions()
+
+        // Create PDF
         const doc = new jsPDF({
-            orientation: 'p',
+            orientation: aspectRatio === '16/9' ? 'l' : 'p',
             unit: 'px',
-            format: [340, 425] // Matching the CSS width 340px and aspect ratio 4/5 (340 * 1.25 = 425)
+            format: [width, height]
         })
 
         for (let i = 0; i < slides.length; i++) {
             const el = slideRefs.current[i]
             if (el) {
-                if (i > 0) doc.addPage()
-                const dataUrl = await toPng(el)
-                doc.addImage(dataUrl, 'PNG', 0, 0, 340, 425)
+                if (i > 0) doc.addPage([width, height])
+                const dataUrl = await toPng(el, { pixelRatio: 3, cacheBust: true })
+                doc.addImage(dataUrl, 'PNG', 0, 0, width, height)
             }
         }
 
@@ -228,6 +254,69 @@ export function CarouselEditor() {
 
                         <div className="space-y-2 pt-2">
                             <ColorPicker label="Accent Color" value={primaryColor} onChange={setPrimaryColor} />
+                        </div>
+
+                        <div className="space-y-2 pt-2 border-t border-slate-800">
+                            <h3 className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-2 flex items-center gap-2">
+                                <Ratio className="h-4 w-4" /> Canvas Size
+                            </h3>
+                            <div className="flex bg-slate-900 p-1 rounded-md border border-slate-700">
+                                <button
+                                    onClick={() => setAspectRatio('4/5')}
+                                    className={`flex-1 py-1.5 text-[10px] font-medium rounded ${aspectRatio === '4/5' ? 'bg-slate-700 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'}`}
+                                >
+                                    Portrait (4:5)
+                                </button>
+                                <button
+                                    onClick={() => setAspectRatio('1/1')}
+                                    className={`flex-1 py-1.5 text-[10px] font-medium rounded ${aspectRatio === '1/1' ? 'bg-slate-700 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'}`}
+                                >
+                                    Square (1:1)
+                                </button>
+                                <button
+                                    onClick={() => setAspectRatio('16/9')}
+                                    className={`flex-1 py-1.5 text-[10px] font-medium rounded ${aspectRatio === '16/9' ? 'bg-slate-700 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'}`}
+                                >
+                                    Landscape
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Logo Style Selector */}
+                        <div className="space-y-2 pt-2 border-t border-slate-800">
+                            <h3 className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-2 flex items-center gap-2">
+                                <Palette className="h-4 w-4" /> Logo Style
+                            </h3>
+                            <div className="grid grid-cols-4 gap-1">
+                                {(['original', 'grayscale', 'white', 'black'] as LogoStyle[]).map(style => (
+                                    <button
+                                        key={style}
+                                        onClick={() => setLogoStyle(style)}
+                                        className={`text-[10px] py-1.5 rounded border capitalize transition-colors ${logoStyle === style
+                                            ? 'bg-purple-500/20 border-purple-500 text-purple-300'
+                                            : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-600'
+                                            }`}
+                                    >
+                                        {style}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Logo Size Control */}
+                        <div className="space-y-2 pt-2 border-t border-slate-800">
+                            <div className="flex justify-between items-center text-xs font-medium text-slate-300">
+                                <span>Logo Size</span>
+                                <span className="text-slate-500">{logoSize}px</span>
+                            </div>
+                            <input
+                                type="range"
+                                min="20"
+                                max="80"
+                                value={logoSize}
+                                onChange={(e) => setLogoSize(Number(e.target.value))}
+                                className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-purple-500"
+                            />
                         </div>
 
                         <div className="space-y-2">
@@ -319,9 +408,27 @@ export function CarouselEditor() {
                     ) : (
                         slides.map((slide, idx) => (
                             <Card key={idx} className="bg-slate-800 border-slate-700 shadow-none hover:border-slate-600 transition-colors">
-                                <div className="px-3 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-700 flex justify-between bg-black/20">
-                                    Day {slide.day_offset}
-                                    <span className="text-slate-600">#{idx + 1}</span>
+                                <div className="px-3 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-700 flex justify-between items-center bg-black/20">
+                                    <span>Day {slide.day_offset}</span>
+                                    <div className="flex items-center gap-2">
+                                        <button
+                                            onClick={() => handleSlideChange(idx, 'hide_logo', !slide.hide_logo as any)}
+                                            className="text-slate-500 hover:text-purple-400 transition-colors"
+                                            title={slide.hide_logo ? "Show Logo" : "Hide Logo"}
+                                        >
+                                            {slide.hide_logo ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                                        </button>
+                                        <label className="cursor-pointer hover:text-purple-400 transition-colors" title="Upload custom image">
+                                            <ImagePlus className="h-3 w-3" />
+                                            <input
+                                                type="file"
+                                                className="hidden"
+                                                accept="image/*"
+                                                onChange={(e) => handleImageUpload(idx, e)}
+                                            />
+                                        </label>
+                                        <span className="text-slate-600">#{idx + 1}</span>
+                                    </div>
                                 </div>
                                 <CardContent className="p-3">
                                     <Textarea
@@ -366,114 +473,163 @@ export function CarouselEditor() {
                             <p className="max-w-xs text-center text-sm">Select a topic and generate to see your high-fidelity carousel here.</p>
                         </div>
                     ) : (
-                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-10 justify-items-center pb-20">
-                            {slides.map((slide, idx) => (
-                                <div key={idx} className="relative group/preview">
+                        <div className="flex flex-col h-full">
+                            {/* Scrollable Container */}
+                            <div
+                                className="flex-1 overflow-x-auto overflow-y-hidden snap-x snap-mandatory flex items-center px-10 gap-8 custom-scrollbar scroll-smooth"
+                                onScroll={(e) => {
+                                    const container = e.currentTarget
+                                    const index = Math.round(container.scrollLeft / (340 + 32)) // 340px card + 32px gap
+                                    setCurrentSlideIndex(Math.min(Math.max(0, index), slides.length - 1))
+                                }}
+                            >
+                                {slides.map((slide, idx) => (
+                                    <div key={idx} className="relative group/preview snap-center shrink-0 my-auto">
 
-                                    {/* === THE GLASS CARD RENDER === */}
-                                    <div
-                                        // @ts-ignore
-                                        ref={el => slideRefs.current[idx] = el}
-                                        className="aspect-[4/5] w-[340px] relative overflow-hidden flex flex-col transition-all duration-500 shadow-2xl hover:shadow-[0_0_40px_rgba(124,58,237,0.3)] hover:-translate-y-2"
-                                        style={{
-                                            background: backgroundStyle,
-                                            fontFamily: font
-                                        }}
-                                    >
-                                        {/* Optional: Noise overlay for texture */}
-                                        <div className="absolute inset-0 opacity-[0.03] pointer-events-none mix-blend-overlay" style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")` }}></div>
-
-                                        <GlassCard
-                                            variant={theme.includes('light') ? 'light' : theme.includes('neon') ? 'neon' : 'dark'}
-                                            className="h-full flex flex-col border-none bg-black/10 backdrop-blur-md m-4 rounded-xl overflow-hidden shadow-inner relative"
+                                        {/* === THE GLASS CARD RENDER === */}
+                                        <div
+                                            // @ts-ignore
+                                            ref={el => slideRefs.current[idx] = el}
+                                            className={`${getDimensions().aspect} w-[340px] relative overflow-hidden flex flex-col transition-all duration-500 shadow-2xl hover:shadow-[0_0_40px_rgba(124,58,237,0.3)] hover:-translate-y-2`}
+                                            style={{
+                                                background: backgroundStyle,
+                                                fontFamily: font
+                                            }}
                                         >
-                                            {/* Layout: VISUAL (Full Image Background) */}
-                                            {slide.layout === 'visual' && slide.image_prompt && (
-                                                <div className="absolute inset-0 z-0">
-                                                    <img
-                                                        src={`https://image.pollinations.ai/prompt/${encodeURIComponent(slide.image_prompt)}?width=600&height=800&nologo=true&seed=${idx}`}
-                                                        alt="Background"
-                                                        className="w-full h-full object-cover opacity-60"
-                                                    />
-                                                    <div className="absolute inset-0 bg-gradient-to-t from-black via-black/50 to-transparent" />
+                                            {/* Optional: Noise overlay for texture */}
+                                            <div className="absolute inset-0 opacity-[0.03] pointer-events-none mix-blend-overlay" style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")` }}></div>
+
+                                            <GlassCard
+                                                variant={theme.includes('light') ? 'light' : theme.includes('neon') ? 'neon' : 'dark'}
+                                                className="h-full flex flex-col border-none bg-black/10 backdrop-blur-md m-4 rounded-xl overflow-hidden shadow-inner relative"
+                                            >
+                                                {/* Layout: VISUAL (Full Image Background) */}
+                                                {/* Layout: VISUAL (Full Image Background) */}
+                                                {slide.layout === 'visual' && (slide.custom_image_url || slide.image_prompt) && (
+                                                    <div className="absolute inset-0 z-0">
+                                                        <img
+                                                            src={slide.custom_image_url || `https://image.pollinations.ai/prompt/${encodeURIComponent(slide.image_prompt)}?width=600&height=800&nologo=true&seed=${idx}`}
+                                                            alt="Background"
+                                                            className="w-full h-full object-cover opacity-60"
+                                                        />
+                                                        <div className="absolute inset-0 bg-gradient-to-t from-black via-black/50 to-transparent" />
+                                                    </div>
+                                                )}
+
+                                                {/* Top Bar */}
+                                                <div className="p-6 pb-2 flex justify-between items-center opacity-80 z-20 relative">
+                                                    <span className="text-[10px] font-bold tracking-widest flex items-center gap-1.5 px-3 py-1 rounded-full border border-current backdrop-blur-sm" style={{ color: primaryColor, backgroundColor: slide.layout === 'visual' ? 'rgba(0,0,0,0.4)' : 'rgba(255,255,255,0.1)' }}>
+                                                        {idx === slides.length - 1 ? 'END' : (
+                                                            <>
+                                                                SWIPE <ArrowRight className="w-3 h-3" />
+                                                            </>
+                                                        )}
+                                                    </span>
+                                                    <div className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: primaryColor }} />
                                                 </div>
-                                            )}
 
-                                            {/* Top Bar */}
-                                            <div className="p-6 pb-2 flex justify-between items-center opacity-80 z-20 relative">
-                                                <span className="text-[10px] font-black uppercase tracking-[0.2em]" style={{ color: primaryColor, textShadow: slide.layout === 'visual' ? '0 2px 4px black' : 'none' }}>
-                                                    Step {idx + 1}
-                                                </span>
-                                                <div className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: primaryColor }} />
-                                            </div>
+                                                {/* Main Content */}
+                                                <div className={`flex-1 px-6 py-2 flex flex-col relative z-10 ${slide.layout === 'visual' ? 'justify-end pb-10' : ''}`}>
 
-                                            {/* Main Content */}
-                                            <div className={`flex-1 px-6 py-2 flex flex-col relative z-10 ${slide.layout === 'visual' ? 'justify-end pb-10' : ''}`}>
-
-                                                {/* Layout: SPLIT (Image Top, Text Bottom) */}
-                                                {slide.layout === 'split' && slide.image_prompt && (
-                                                    <div className="h-32 mb-4 rounded-lg overflow-hidden relative shrink-0">
-                                                        <img
-                                                            src={`https://image.pollinations.ai/prompt/${encodeURIComponent(slide.image_prompt)}?width=600&height=400&nologo=true&seed=${idx}`}
-                                                            className="w-full h-full object-cover"
-                                                        />
-                                                    </div>
-                                                )}
-
-                                                <p className={`font-bold leading-tight tracking-tight drop-shadow-sm whitespace-pre-wrap mb-4 ${slide.layout === 'visual' ? 'text-2xl text-white drop-shadow-md' : 'text-xl md:text-2xl'}`}>
-                                                    {slide.content}
-                                                </p>
-
-                                                {/* Layout: CLASSIC (Bottom Image) */}
-                                                {(!slide.layout || slide.layout === 'classic') && slide.image_prompt && (
-                                                    <div className="flex-1 min-h-0 rounded-lg overflow-hidden relative group/image mt-auto">
-                                                        <img
-                                                            src={`https://image.pollinations.ai/prompt/${encodeURIComponent(slide.image_prompt)}?width=600&height=600&nologo=true&seed=${idx}`}
-                                                            alt="AI Generated"
-                                                            className="w-full h-full object-cover opacity-90 hover:scale-105 transition-transform duration-700"
-                                                        />
-                                                        <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black/80 to-transparent pointer-events-none" />
-                                                    </div>
-                                                )}
-
-                                                {/* Layout: INFOGRAPHIC */}
-                                                {slide.layout === 'infographic' && (
-                                                    <InfographicCard
-                                                        content={slide.content}
-                                                        image_prompt={slide.image_prompt}
-                                                        data_points={slide.data_points}
-                                                    />
-                                                )}
-                                            </div>
-
-                                            {/* Branding Footer */}
-                                            {(brandName || brandHandle || logoUrl) && (
-                                                <div className="p-4 border-t border-white/5 bg-black/20 backdrop-blur-md flex items-center gap-3 z-20 relative">
-                                                    {/* Avatar / Logo */}
-                                                    {logoUrl ? (
-                                                        <img src={logoUrl} alt="Brand" className="h-8 w-8 rounded-full border border-white/10 object-cover shrink-0" />
-                                                    ) : (
-                                                        <div className="h-8 w-8 rounded-full bg-gradient-to-br from-white/20 to-white/5 border border-white/10 shrink-0" />
+                                                    {/* Layout: SPLIT (Image Top, Text Bottom) */}
+                                                    {slide.layout === 'split' && (slide.custom_image_url || slide.image_prompt) && (
+                                                        <div className="h-32 mb-4 rounded-lg overflow-hidden relative shrink-0">
+                                                            <img
+                                                                src={slide.custom_image_url || `https://image.pollinations.ai/prompt/${encodeURIComponent(slide.image_prompt)}?width=600&height=400&nologo=true&seed=${idx}`}
+                                                                className="w-full h-full object-cover"
+                                                            />
+                                                        </div>
                                                     )}
 
-                                                    <div className="flex flex-col min-w-0">
-                                                        <span className="text-xs font-bold truncate leading-none mb-1">{brandName}</span>
-                                                        <span className="text-[9px] opacity-60 truncate leading-none">{brandHandle}</span>
-                                                    </div>
-                                                </div>
-                                            )}
-                                        </GlassCard>
-                                    </div>
-                                    {/* === END CARD === */}
+                                                    <p className={`font-bold leading-tight tracking-tight drop-shadow-sm whitespace-pre-wrap mb-4 ${slide.layout === 'visual' ? 'text-2xl text-white drop-shadow-md' : 'text-xl md:text-2xl'}`}>
+                                                        {slide.content}
+                                                    </p>
 
-                                    {/* Hover Download Button */}
-                                    <div className="absolute -right-4 top-4 opacity-0 group-hover/preview:opacity-100 group-hover/preview:right-4 transition-all duration-300">
-                                        <Button size="icon" className="h-10 w-10 rounded-full bg-white text-black hover:bg-white/90 shadow-lg" onClick={() => handleDownloadSlide(idx)}>
-                                            <Download className="h-4 w-4" />
-                                        </Button>
+                                                    {/* Layout: CLASSIC (Bottom Image) */}
+                                                    {(!slide.layout || slide.layout === 'classic') && (slide.custom_image_url || slide.image_prompt) && (
+                                                        <div className="flex-1 min-h-0 rounded-lg overflow-hidden relative group/image mt-auto">
+                                                            <img
+                                                                src={slide.custom_image_url || `https://wsrv.nl/?url=${encodeURIComponent(`https://image.pollinations.ai/prompt/${encodeURIComponent(slide.image_prompt)}?width=600&height=600&nologo=true&seed=${idx}`)}`}
+                                                                alt="AI Generated"
+                                                                className="w-full h-full object-cover opacity-90 hover:scale-105 transition-transform duration-700"
+                                                            />
+                                                            <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black/80 to-transparent pointer-events-none" />
+                                                        </div>
+                                                    )}
+
+                                                    {/* Layout: INFOGRAPHIC */}
+                                                    {slide.layout === 'infographic' && (
+                                                        <InfographicCard
+                                                            content={slide.content}
+                                                            image_prompt={slide.custom_image_url || slide.image_prompt}
+                                                            data_points={slide.data_points}
+                                                        />
+                                                    )}
+                                                </div>
+
+                                                {/* Top Right Logo */}
+                                                {logoUrl && !slide.hide_logo && (
+                                                    <div className="absolute top-6 right-6 z-30">
+                                                        <img
+                                                            src={logoUrl}
+                                                            alt="Logo"
+                                                            className="object-contain drop-shadow-md"
+                                                            style={{
+                                                                width: `${logoSize}px`,
+                                                                height: `${logoSize}px`,
+                                                                filter: logoStyle === 'white' ? 'brightness(0) invert(1)'
+                                                                    : logoStyle === 'black' ? 'brightness(0)'
+                                                                        : logoStyle === 'grayscale' ? 'grayscale(100%)'
+                                                                            : 'none'
+                                                            }}
+                                                        />
+                                                    </div>
+                                                )}
+
+                                                {/* Branding Footer */}
+                                                {(brandName || brandHandle) && (
+                                                    <div className="p-4 border-t border-white/5 bg-black/20 backdrop-blur-md flex items-center gap-3 z-20 relative">
+                                                        <div className="flex flex-col min-w-0">
+                                                            <span className="text-xs font-bold truncate leading-none mb-1">{brandName}</span>
+                                                            <span className="text-[9px] opacity-60 truncate leading-none">{brandHandle}</span>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </GlassCard>
+                                        </div>
+                                        {/* === END CARD === */}
+
+                                        {/* Hover Download Button */}
+                                        <div className="absolute -right-4 top-4 opacity-0 group-hover/preview:opacity-100 group-hover/preview:right-4 transition-all duration-300">
+                                            <Button size="icon" className="h-10 w-10 rounded-full bg-white text-black hover:bg-white/90 shadow-lg" onClick={() => handleDownloadSlide(idx)}>
+                                                <Download className="h-4 w-4" />
+                                            </Button>
+                                        </div>
                                     </div>
-                                </div>
-                            ))}
+                                ))}
+                            </div>
+
+                            {/* Dots Navigation */}
+                            <div className="h-16 flex items-center justify-center gap-2 shrink-0 z-20">
+                                {slides.map((_, idx) => (
+                                    <button
+                                        key={idx}
+                                        onClick={() => {
+                                            const container = document.querySelector('.snap-x')
+                                            if (container) {
+                                                container.scrollTo({
+                                                    left: idx * (340 + 32),
+                                                    behavior: 'smooth'
+                                                })
+                                            }
+                                        }}
+                                        className={`h-2 rounded-full transition-all duration-300 ${currentSlideIndex === idx
+                                            ? 'w-8 bg-purple-500'
+                                            : 'w-2 bg-slate-700 hover:bg-slate-600'
+                                            }`}
+                                    />
+                                ))}
+                            </div>
                         </div>
                     )}
                 </div>
