@@ -11,7 +11,7 @@ class ContentGenerator:
         if not final_api_key:
             raise ValueError("GEMINI_API_KEY not provided and not found in environment variables")
         genai.configure(api_key=final_api_key)
-        self.model = genai.GenerativeModel('gemini-2.0-flash')
+        self.model = genai.GenerativeModel('gemini-1.5-flash')
 
     def generate_json(self, context, days):
         """Generates content and returns it as a list of dicts, without saving to DB."""
@@ -135,9 +135,40 @@ class ContentGenerator:
         self.session.commit()
         print(f"Successfully scheduled {len(posts_data)} posts.")
 
-    def generate_image(self, prompt):
-        # Placeholder for image generation logic
-        # In a real scenario, this would call DALL-E, Midjourney, or Gemini Image generation
-        # For now, we will just log it.
-        print(f"Would generate image for: {prompt}")
-        return "path/to/placeholder.png"
+    def generate_image(self, prompt: str) -> str:
+        """
+        Generates an image using Gemini's image generation model.
+        Returns base64 encoded image data.
+        """
+        try:
+            # Use Gemini's image generation model
+            # Try gemini-2.5-flash first (supports image generation in response_modalities)
+            image_model = genai.GenerativeModel(
+                'gemini-1.5-flash',
+                generation_config=genai.GenerationConfig(
+                    response_modalities=['image', 'text']
+                )
+            )
+            
+            enhanced_prompt = f"""Generate a high-quality, professional image:
+            {prompt}
+            
+            Style: Photorealistic, clean, modern, professional photography, 8K quality, 
+            dramatic lighting, sharp focus, depth of field."""
+            
+            response = image_model.generate_content(enhanced_prompt)
+            
+            # Extract image from response
+            for part in response.parts:
+                if hasattr(part, 'inline_data') and part.inline_data:
+                    import base64
+                    image_data = base64.b64encode(part.inline_data.data).decode('utf-8')
+                    mime_type = part.inline_data.mime_type
+                    return f"data:{mime_type};base64,{image_data}"
+            
+            # If no image in response, return None
+            return None
+            
+        except Exception as e:
+            print(f"Gemini image generation failed: {e}")
+            return None
